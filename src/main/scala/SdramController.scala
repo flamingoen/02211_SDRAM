@@ -44,6 +44,10 @@ class MemoryInterface extends Bundle {
     val rasN        = UInt(OUTPUT, 1)   //RAS, in conjunction with CAS and WE, forms the device command. See the "Command Truth Table" item for details on device commands
 }
 
+/*
+References:
+- VHDL working implementation of the sdram: https://github.com/t-crest/sdram/blob/master/vhdl/sdr_dram.vhd
+*/
 class SdramController extends Module {
   val io = new Bundle {
     val userInterface = new UserInterface();
