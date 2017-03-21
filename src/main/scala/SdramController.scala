@@ -1,47 +1,63 @@
 
+package io
+
 import Chisel._
+import Node._
 
-class UserInterface extends Bundle {
-    val cmd         = UInt(INPUT, 3)
-    val addr        = UInt(INPUT, 25)
-    val m_data      = UInt(INPUT, 32)
-    val dataByteEn  = UInt(INPUT, 4)
-    val dataValid   = UInt(INPUT, 1)
-    
-    val cmd_accept  = UInt(OUTPUT, 1)
-    val data_accept = UInt(OUTPUT, 1)
-    val s_data      = UInt(OUTPUT, 1)
-    val resp        = UInt(OUTPUT, 1)
-}
-
-class MemoryInterface extends Bundle {
-    val dq_o        = UInt(OUTPUT, 32)
-    val dq_i        = dq_o.flip
-    val dqm         = UInt(OUTPUT, 4)
-    
-    val clk         = UInt(OUTPUT, 1)
-    val cke         = UInt(OUTPUT, 1)
-    val ras         = UInt(OUTPUT, 1)
-    val cas         = UInt(OUTPUT, 1)
-    val we          = UInt(OUTPUT, 1)
-    val cs          = UInt(OUTPUT, 1)
-    val BA          = UInt(OUTPUT, 2)
-    val addr        = UInt(OUTPUT, 13)
-}
-
-class SdramController extends Module {
-  val io = new Bundle {
-    val userInterface = new UserInterface();
-    val memInterface = new MemoryInterface();
-  }
-}
+import patmos.Constants._
+import ocp._
 
 /**
  * An object containing a main() to invoke chiselMain()
  * to generate the Verilog code.
  */
-object SdramController {
-  def main(args: Array[String]): Unit = {
-    chiselMain(Array("--backend", "v"), () => Module(new SdramController()))
-  }
+object SdramController extends DeviceObject{
+     var sdramAddrWidth  = 13
+     var sdramDataWidth  = 32
+     var ocpAddrWidth    = 25
+    
+     def init(params: Map[String, String]) = {
+         sdramAddrWidth = getPosIntParam(params, "sdramAddrWidth")
+         sdramDataWidth = getPosIntParam(params, "sdramDataWidth")
+         ocpAddrWidth = getPosIntParam(params, "ocpAddrWidth")
+     }
+
+    def create(params: Map[String, String]) : SdramController = {
+        Module(new SdramController(ocpAddrWidth))
+    }
+    
+    trait Pins {
+        val sdramControllerPins = new Bundle {
+            val ramOut = new Bundle {
+                val dq      = Bits(OUTPUT , width = sdramDataWidth)
+                val dqm     = Bits(OUTPUT , width = 4)
+                val addr    = Bits(OUTPUT , width = sdramDataWidth)
+                val ba      = Bits(OUTPUT , width = 2)
+                val clk     = Bits(OUTPUT , width = 1)
+                val cke     = Bits(OUTPUT , width = 1)
+                val ras     = Bits(OUTPUT , width = 1)
+                val cas     = Bits(OUTPUT , width = 1)
+                val we      = Bits(OUTPUT , width = 1)
+                val cs      = Bits(OUTPUT , width = 1)
+            }
+            val ramIn = new Bundle {
+                val dq      = Bits(OUTPUT , width = sdramAddrWidth)
+            }
+        }
+    }
+}
+
+
+class SdramController(ocpAddrWidth : Int) extends BurstDevice(ocpAddrWidth) {
+    override val io = new BurstDeviceIO(ocpAddrWidth) with SdramController.Pins
+    
+    // Controller in here
+}
+
+object sdramControllerMain {
+    def main(args: Array[String]): Unit = {
+        val chiselArgs = args.slice(1,args.length)
+        val ocpAddrWidth = args(0).toInt
+        chiselMain(chiselArgs, () => Module(new SdramController(ocpAddrWidth)))
+    }
 }
