@@ -44,6 +44,17 @@ class MemoryInterface extends Bundle {
     val rasN        = UInt(OUTPUT, 1)   //RAS, in conjunction with CAS and WE, forms the device command. See the "Command Truth Table" item for details on device commands
 }
 
+object Mcmd extends Enumeration {
+   val idle = "b000".U
+   val write = "b001".U
+   val read = "b010".U
+   val readEx = "b011".U
+   val readLinked = "b100".U
+   val writeNonPost = "b101".U
+   val writeConditional = "b110".U
+   val broadcast = "b111".U
+} 
+
 /*
 References:
 - VHDL working implementation of the sdram: https://github.com/t-crest/sdram/blob/master/vhdl/sdr_dram.vhd
