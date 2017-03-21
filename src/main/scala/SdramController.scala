@@ -6,6 +6,7 @@ OCPburst
 References: 
 - Section 3.6.1 of the Patmos Handbook
 - Code from the file "patmos_de2-115-sdram.vhdl" located in https://github.com/t-crest/patmos
+- Specification of OpenCoreProtocol (OCP) located in http://www.accellera.org/images/downloads/standards/ocp/OCP_3.0_Specification.zip
 */
 class UserInterface extends Bundle {
     //Master
@@ -29,7 +30,7 @@ References:
 */
 class MemoryInterface extends Bundle {
     val dqO         = UInt(OUTPUT, 32)  //Data I/O
-    val dqI         = dq_o.flip         //Data I/O
+    val dqI         = dqO.flip         	//Data I/O
     val dqm         = UInt(OUTPUT, 4)   //x32 Input/Output Mask
     
     val cke         = UInt(OUTPUT, 1)   //The CKE input determines whether the CLK input is enabled. The next rising edge of the CLK signal will be valid when is CKE HIGH and invalid when LOW. When CKE is LOW, the device will be in either power-down mode, clock suspend mode, or self refresh mode. CKE is an asynchronous input.
