@@ -1,5 +1,8 @@
 SBT = sbt
 
 # Generate Verilog code
-controller:
+local:
 	$(SBT) "run-main SdramController"
+
+patmos:
+	cd ~/t-crest/patmos && make patmos

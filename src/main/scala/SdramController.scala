@@ -1,18 +1,17 @@
 
 package io
 
+import scala.math._
+
 import Chisel._
 import Node._
 
-import patmos.Constants._
 import ocp._
+import patmos.Constants._
 
-/**
- * An object containing a main() to invoke chiselMain()
- * to generate the Verilog code.
- */
-object SdramController extends DeviceObject{
-     var sdramAddrWidth  = 13
+
+object SdramController extends DeviceObject {
+     var sdramAddrWidth  = 13   
      var sdramDataWidth  = 32
      var ocpAddrWidth    = 25
     
@@ -41,7 +40,7 @@ object SdramController extends DeviceObject{
                 val cs      = Bits(OUTPUT , width = 1)
             }
             val ramIn = new Bundle {
-                val dq      = Bits(OUTPUT , width = sdramAddrWidth)
+                val dq      = Bits(INPUT , width = sdramAddrWidth)
             }
         }
     }
