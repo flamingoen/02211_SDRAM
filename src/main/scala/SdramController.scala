@@ -52,8 +52,8 @@ class SdramController(ocpAddrWidth : Int) extends BurstDevice(ocpAddrWidth) {
     val cmd = io.ocp.M.Cmd
     
     val read :: write :: precharge :: auto_precharge :: auto_refresh_command :: burst_terminate :: command_inhibit :: no_operation :: load_mode_register :: active_command :: Nil = Enum(UInt(), 10)
-    val SDState = Reg(init = no_operation)
-    
+    val memState = Reg(init = no_operation)
+
     when(cmd === OcpCmd.RD) {
     
         // Read logic
@@ -62,55 +62,59 @@ class SdramController(ocpAddrWidth : Int) extends BurstDevice(ocpAddrWidth) {
         
         // Write logic
         
-    } .otherwise { //Assumes cmd === OcpCmd.IDLE
+    } .elsewhen (cmd === OcpCmd.IDLE) {
+
+        // Idle logic
+
+    }.otherwise {
     
-        // Idle logic here
+        // Manage all the other OCP commands that at the moment of writing this are not implemented
     
     }
-    
-    
-    SDState := no_operation
-    
-    when(SDState === read) {
+        
+    when(memState === read) {
     
     
     
-    } .elsewhen (SDState === write) {
+    } .elsewhen (memState === write) {
     
     
     
-    } .elsewhen (SDState === precharge) {
+    } .elsewhen (memState === precharge) {
     
     
     
-    } .elsewhen (SDState === auto_precharge) {
+    } .elsewhen (memState === auto_precharge) {
     
     
     
-    } .elsewhen (SDState === auto_refresh_command) {
+    } .elsewhen (memState === auto_refresh_command) {
     
     
     
-    } .elsewhen (SDState === burst_terminate) {
+    } .elsewhen (memState === burst_terminate) {
     
     
     
-    } .elsewhen (SDState === command_inhibit) {
+    } .elsewhen (memState === command_inhibit) {
     
     
     
-    } .elsewhen (SDState === load_mode_register) {
+    } .elsewhen (memState === load_mode_register) {
     
     
     
-    } .elsewhen (SDState === active_command) {
+    } .elsewhen (memState === active_command) {
     
     
-    
-    } 
-    .otherwise { // Assumes SDState === no_operation
-    
-    
+
+    } .elsewhen (memState === no_operation) {
+        
+
+
+    } .otherwise { 
+
+        // Manage possible future cases
     
     }
 }
