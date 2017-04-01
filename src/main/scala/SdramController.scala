@@ -49,7 +49,22 @@ object SdramController extends DeviceObject {
 class SdramController(ocpAddrWidth : Int) extends BurstDevice(ocpAddrWidth) {
     override val io = new BurstDeviceIO(ocpAddrWidth) with SdramController.Pins
     
-    // Controller in here
+    val cmd = io.ocp.M.Cmd
+    when(cmd === OcpCmd.RD) {
+    
+        // Read logic
+        
+    } .elsewhen (cmd === OcpCmd.WR) {
+    
+        // Write logic
+        
+    } .otherwise { //Assumes cmd === OcpCmd.IDLE
+    
+        // Idle logic here
+    
+    }
+    
+    
 }
 
 object sdramControllerMain {
