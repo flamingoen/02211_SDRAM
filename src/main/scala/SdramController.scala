@@ -52,7 +52,7 @@ class SdramController(ocpAddrWidth : Int) extends BurstDevice(ocpAddrWidth) {
     
     // States obtained from the IS42/45R86400D/16320D/32160D datasheet, from the table "COMMAND TRUTH TABLE"
     val deviceDeselect :: noOperation :: burstStop :: read :: readWithAutoPrecharge :: write :: writeWithAutoPrecharge :: bankActivate :: prechargeSelectBank :: prechargeAllBanks :: cbrAutoRefresh :: selfRefresh :: modeRegisterSet :: Nil = Enum(UInt(), 13)
-    val memState = Reg(init = no_operation)
+    val memState = Reg(init = noOperation)
 
     when(cmd === OcpCmd.RD) {
     
