@@ -117,6 +117,9 @@ $(VGENCORE): $(BOOTBIN) $(BOOTDAT) $(SRC)
 	$(SBT) "run-main $(COREMAIN) $(CONFIGFILE) $(BOOTBIN) $(BOOTDAT) --targetDir $(HWBUILDDIR) --cse --backend v $(HWMODULEPREFIXOPT)"
 	echo $(CONFIGFILE)+$(BOOTBIN)+$(BOOTDAT)+$(HWMODULEPREFIX) > $(VGENCORE)
 
+$(HWBUILDDIR)/SdramController.v: $(SRC)
+	$(SBT) "run-main $(SDRAM) $(MEMCTRL_ADDR_WIDTH) --targetDir $(HWBUILDDIR) --cse --backend v"
+
 $(HWBUILDDIR)/SSRam32Ctrl.v: $(SRC)
 	$(SBT) "run-main $(MEMCTRLMAIN32) $(MEMCTRL_ADDR_WIDTH) --targetDir $(HWBUILDDIR) --cse --backend v"
 
@@ -131,9 +134,6 @@ $(HWBUILDDIR)/Arbiter.v: $(SRC)
 
 $(HWBUILDDIR)/TdmArbiterWrapper.v: $(SRC)
 	$(SBT) "run-main $(TDMARBITERMAIN) $(ARBITER_CNT) $(ARBITER_ADDR_WIDTH) $(ARBITER_DATA_WIDTH) $(ARBITER_BURST_LENGTH) --targetDir $(HWBUILDDIR) --cse --backend v"
-
-$(HWBUILDDIR)/SdramController.v: $(SRC)
-	$(SBT) "run-main $(SDRAM) $(MEMCTRL_ADDR_WIDTH) --targetDir $(HWBUILDDIR) --cse --backend v"
 
 # run Verilog simulation
 vsim: verilog
