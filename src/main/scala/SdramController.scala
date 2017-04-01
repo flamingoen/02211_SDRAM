@@ -45,13 +45,13 @@ object SdramController extends DeviceObject {
     }
 }
 
-
 class SdramController(ocpAddrWidth : Int) extends BurstDevice(ocpAddrWidth) {
     override val io = new BurstDeviceIO(ocpAddrWidth) with SdramController.Pins
     
     val cmd = io.ocp.M.Cmd
     
-    val read :: write :: precharge :: auto_precharge :: auto_refresh_command :: burst_terminate :: command_inhibit :: no_operation :: load_mode_register :: active_command :: Nil = Enum(UInt(), 10)
+    // States obtained from the IS42/45R86400D/16320D/32160D datasheet, from the table "COMMAND TRUTH TABLE"
+    val deviceDeselect :: noOperation :: burstStop :: read :: readWithAutoPrecharge :: write :: writeWithAutoPrecharge :: bankActivate :: prechargeSelectBank :: prechargeAllBanks :: cbrAutoRefresh :: selfRefresh :: modeRegisterSet :: Nil = Enum(UInt(), 13)
     val memState = Reg(init = no_operation)
 
     when(cmd === OcpCmd.RD) {
@@ -77,38 +77,22 @@ class SdramController(ocpAddrWidth : Int) extends BurstDevice(ocpAddrWidth) {
     
     
     } .elsewhen (memState === write) {
+
+
+    
+    } .elsewhen (memState === cbrAutoRefresh) {
     
     
     
-    } .elsewhen (memState === precharge) {
+    } .elsewhen (memState === burstStop) {
+
     
     
-    
-    } .elsewhen (memState === auto_precharge) {
-    
-    
-    
-    } .elsewhen (memState === auto_refresh_command) {
-    
-    
-    
-    } .elsewhen (memState === burst_terminate) {
-    
-    
-    
-    } .elsewhen (memState === command_inhibit) {
-    
-    
-    
-    } .elsewhen (memState === load_mode_register) {
-    
-    
-    
-    } .elsewhen (memState === active_command) {
+    } .elsewhen (memState === bankActivate) {
     
     
 
-    } .elsewhen (memState === no_operation) {
+    } .elsewhen (memState === noOperation) {
         
 
 
