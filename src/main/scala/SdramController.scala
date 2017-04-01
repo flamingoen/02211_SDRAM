@@ -50,12 +50,16 @@ class SdramController(ocpAddrWidth : Int) extends BurstDevice(ocpAddrWidth) {
     override val io = new BurstDeviceIO(ocpAddrWidth) with SdramController.Pins
     
     val cmd = io.ocp.M.Cmd
+    
+    val read :: write :: precharge :: auto_precharge :: auto_refresh_command :: burst_terminate :: command_inhibit :: no_operation :: load_mode_register :: active_command :: Nil = Enum(UInt(), 10)
+    val SDState = Reg(init = no_operation)
+    
     when(cmd === OcpCmd.RD) {
     
         // Read logic
         
     } .elsewhen (cmd === OcpCmd.WR) {
-    
+        
         // Write logic
         
     } .otherwise { //Assumes cmd === OcpCmd.IDLE
@@ -65,6 +69,50 @@ class SdramController(ocpAddrWidth : Int) extends BurstDevice(ocpAddrWidth) {
     }
     
     
+    SDState := no_operation
+    
+    when(SDState === read) {
+    
+    
+    
+    } .elsewhen (SDState === write) {
+    
+    
+    
+    } .elsewhen (SDState === precharge) {
+    
+    
+    
+    } .elsewhen (SDState === auto_precharge) {
+    
+    
+    
+    } .elsewhen (SDState === auto_refresh_command) {
+    
+    
+    
+    } .elsewhen (SDState === burst_terminate) {
+    
+    
+    
+    } .elsewhen (SDState === command_inhibit) {
+    
+    
+    
+    } .elsewhen (SDState === load_mode_register) {
+    
+    
+    
+    } .elsewhen (SDState === active_command) {
+    
+    
+    
+    } 
+    .otherwise { // Assumes SDState === no_operation
+    
+    
+    
+    }
 }
 
 object sdramControllerMain {
