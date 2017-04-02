@@ -44,9 +44,14 @@ object SdramController extends DeviceObject {
   }
 }
 
-class SdramController(ocpAddrWidth: Int) extends BurstDevice(ocpAddrWidth) {
+class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocpAddrWidth) {
   override val io = new BurstDeviceIO(ocpAddrWidth) with SdramController.Pins
   val cmd         = io.ocp.M.Cmd
+  // Controller states
+  val idle :: write :: read :: Nil = Enum(UInt(), 3)
+  val state = Reg(init = idle);
+  // counter used for burst
+  val burstCount = burstLen
 
   // Examples of use of the encoder/decoder of memCmd. We just need to send orders to the memory, so the decode function may be not used in the future
   val memCmd      = MemCmd.decode(
@@ -72,42 +77,101 @@ class SdramController(ocpAddrWidth: Int) extends BurstDevice(ocpAddrWidth) {
     ba     = io.sdramControllerPins.ramOut.ba,
     a10    = io.sdramControllerPins.ramOut.addr(10)
   ) 
+  
+  // state machine for the ocp signal
+  when(state === idle) {
+    
+    when (cmd === OcpCmd.RD) {
 
-  when(cmd === OcpCmd.RD) {
+        // Send ACT signal to mem where addr = OCP addr 22-13, ba1 = OCP addr 24, ba2 = OCP addr 23
+        // reset burst counter
+        // io.ocp.S.CmdAccept should be low
+        // Set next state to read
 
-    // Read logic
+    }
+    
+    .elsewhen (cmd === OcpCmd.WR) {
 
-  }.elsewhen(cmd === OcpCmd.WR) {
+        // Send ACT signal to mem where addr = OCP addr 22-13, ba1 = OCP addr 24, ba2 = OCP addr 23
+        // reset burst counter
+        // io.ocp.S.CmdAccept should be low
+        // Set next state to write
 
-    // Write logic
+    }
+    
+    .elsewhen (cmd === OcpCmd.IDLE) {
 
-  }.elsewhen(cmd === OcpCmd.IDLE) {
+        // Send Nop
+        // Set next state to idle
 
-    // Idle logic
-
-  }.otherwise {
-
-    // Manage all the other OCP commands that at the moment of writing this are not implemented
-
+    }
+    
+    .otherwise {
+    
+        // Manage all the other OCP commands that at the moment of writing this are not implemented
+        
+    }
+  } 
+  
+  .elsewhen (state === write) {
+  
+    // Send write signal to memCmd with address and AUTO PRECHARGE enabled
+    // set io.ocp.S.CmdAccept to HIGH
+    // set io.ocp.S.SDataAccept to HIGH
+    
+    // if burstCounter > 0
+        // burstcounter--
+        // set next address = addr + 4
+        // set next state to write
+    // else set next state to idle
+  
+  } 
+  
+  .elsewhen (state === read) {
+  
+    // Send read signal to memCmd with address and AUTO PRECHARGE enabled
+    
+    // if burstCounter > 0
+        // burstcounter--
+        // set next address = addr + 4
+        // set next state to read
+    
+    // after 2 cycles
+        // set io.ocp.S.CmdAccept to HIGH
+        
+    // after 6 cycles
+        // set next state to idle
+    // before that set next state to read
+  
+  } 
+  
+  .otherwise { 
+  
+    // Not used - could be replaced by one of the states
+    
   }
+  
+  
+// Not sure what to do with this
+//
+//   when(memCmd === MemCmd.read) {
+// 
+//   }.elsewhen(memCmd === MemCmd.write) {
+// 
+//   }.elsewhen(memCmd === MemCmd.cbrAutoRefresh) {
+// 
+//   }.elsewhen(memCmd === MemCmd.burstStop) {
+// 
+//   }.elsewhen(memCmd === MemCmd.bankActivate) {
+// 
+//   }.elsewhen(memCmd === MemCmd.noOperation) {
+// 
+//   }.otherwise {
+// 
+//     // Manage possible future cases
+// 
+//   }
 
-  when(memCmd === MemCmd.read) {
-
-  }.elsewhen(memCmd === MemCmd.write) {
-
-  }.elsewhen(memCmd === MemCmd.cbrAutoRefresh) {
-
-  }.elsewhen(memCmd === MemCmd.burstStop) {
-
-  }.elsewhen(memCmd === MemCmd.bankActivate) {
-
-  }.elsewhen(memCmd === MemCmd.noOperation) {
-
-  }.otherwise {
-
-    // Manage possible future cases
-
-  }
 }
 
 object MemCmd {
