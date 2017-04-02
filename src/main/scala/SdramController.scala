@@ -10,12 +10,11 @@ import ocp._
 import patmos.Constants._
 
 object SdramController extends DeviceObject {
-  var sdramAddrWidth = 13
+  private val sdramAddrWidth = 13
   var sdramDataWidth = 32
   var ocpAddrWidth   = 25
 
   def init(params: Map[String, String]) = {
-    sdramAddrWidth = getPosIntParam(params, "sdramAddrWidth")
     sdramDataWidth = getPosIntParam(params, "sdramDataWidth")
     ocpAddrWidth   = getPosIntParam(params, "ocpAddrWidth")
   }
@@ -48,6 +47,8 @@ object SdramController extends DeviceObject {
 class SdramController(ocpAddrWidth: Int) extends BurstDevice(ocpAddrWidth) {
   override val io = new BurstDeviceIO(ocpAddrWidth) with SdramController.Pins
   val cmd         = io.ocp.M.Cmd
+
+  // Examples of use of the encoder/decoder of memCmd. We just need to send orders to the memory, so the decode function may be not used in the future
   val memCmd      = MemCmd.decode(
                     clk = io.sdramControllerPins.ramOut.clk,
                     cs  = io.sdramControllerPins.ramOut.cs,
@@ -58,19 +59,19 @@ class SdramController(ocpAddrWidth: Int) extends BurstDevice(ocpAddrWidth) {
                     a10 = io.sdramControllerPins.ramOut.addr(10)
                   )
 
-  val a10 = Bits(1, width = 1)
+  // We need to provide a default value for the full word in order to be able to do subword assignation. This is to avoid the "Subword assignment requires a default value to have been assigned" chisel error
+  io.sdramControllerPins.ramOut.addr := UInt(0)
+
   MemCmd.encode(
     memCmd = MemCmd.read,
-    clk = io.sdramControllerPins.ramOut.clk,
-    cs  = io.sdramControllerPins.ramOut.cs,
-    ras = io.sdramControllerPins.ramOut.ras,
-    cas = io.sdramControllerPins.ramOut.cas,
-    we  = io.sdramControllerPins.ramOut.we,
-    ba  = io.sdramControllerPins.ramOut.ba,
-    a10 = a10
-  )
-  io.sdramControllerPins.ramOut.addr(10) := Bits(1, width = 1)
-  
+    clk    = io.sdramControllerPins.ramOut.clk,
+    cs     = io.sdramControllerPins.ramOut.cs,
+    ras    = io.sdramControllerPins.ramOut.ras,
+    cas    = io.sdramControllerPins.ramOut.cas,
+    we     = io.sdramControllerPins.ramOut.we,
+    ba     = io.sdramControllerPins.ramOut.ba,
+    a10    = io.sdramControllerPins.ramOut.addr(10)
+  ) 
 
   when(cmd === OcpCmd.RD) {
 
@@ -116,6 +117,7 @@ object MemCmd {
   // Syntactic sugar
   private val high = Bits(1)
   private val low  = Bits(0)
+
   /* 
     According to the datasheet there are other signals not considered in this function. This is why:
       - clk(n-1): in all cases of the "COMMAND TRUTH TABLE" is high
@@ -185,7 +187,7 @@ object MemCmd {
     }.elsewhen(memCmd === selfRefresh) {
       clk := low; cs := low; ras := low; cas := low; we := high
     }.elsewhen(memCmd === modeRegisterSet) {
-      cs := low; ras := low; cas := low; we := low; ba := Bits(0); a10 := low
+      cs := low; ras := low; cas := low; we := low; ba := low; a10 := low
     }.otherwise {
       // Entering here is an error
     }
