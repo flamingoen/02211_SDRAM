@@ -20,7 +20,7 @@ object SdramController extends DeviceObject {
   }
 
   def create(params: Map[String, String]): SdramController = {
-    Module(new SdramController(ocpAddrWidth))
+    Module(new SdramController(ocpAddrWidth,4))
   }
 
   trait Pins {
@@ -47,34 +47,29 @@ object SdramController extends DeviceObject {
 class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocpAddrWidth) {
   override val io = new BurstDeviceIO(ocpAddrWidth) with SdramController.Pins
   val cmd         = io.ocp.M.Cmd
+  
+  private val high = Bits(1)
+  private val low  = Bits(0)
+  
   // Controller states
   val idle :: write :: read :: Nil = Enum(UInt(), 3)
   val state = Reg(init = idle);
+  val memoryCmd = Reg(init = MemCmd.noOperation);
+  val address = Reg(init = Bits(0))
+  
   // counter used for burst
-  val burstCount = burstLen
-
-  // Examples of use of the encoder/decoder of memCmd. We just need to send orders to the memory, so the decode function may be not used in the future
-  val memCmd      = MemCmd.decode(
-                    clk = io.sdramControllerPins.ramOut.clk,
-                    cs  = io.sdramControllerPins.ramOut.cs,
-                    ras = io.sdramControllerPins.ramOut.ras,
-                    cas = io.sdramControllerPins.ramOut.cas,
-                    we  = io.sdramControllerPins.ramOut.we,
-                    ba  = io.sdramControllerPins.ramOut.ba,
-                    a10 = io.sdramControllerPins.ramOut.addr(10)
-                  )
+  val burstCount = Reg(init = Bits(0));
 
   // We need to provide a default value for the full word in order to be able to do subword assignation. This is to avoid the "Subword assignment requires a default value to have been assigned" chisel error
   io.sdramControllerPins.ramOut.addr := UInt(0)
 
   MemCmd.encode(
-    memCmd = MemCmd.read,
+    memCmd = memoryCmd,
     clk    = io.sdramControllerPins.ramOut.clk,
     cs     = io.sdramControllerPins.ramOut.cs,
     ras    = io.sdramControllerPins.ramOut.ras,
     cas    = io.sdramControllerPins.ramOut.cas,
     we     = io.sdramControllerPins.ramOut.we,
-    ba     = io.sdramControllerPins.ramOut.ba,
     a10    = io.sdramControllerPins.ramOut.addr(10)
   ) 
   
@@ -92,10 +87,22 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
     
     .elsewhen (cmd === OcpCmd.WR) {
 
+        // Save address to later use
+        address := io.ocp.M.Addr
+        
         // Send ACT signal to mem where addr = OCP addr 22-13, ba1 = OCP addr 24, ba2 = OCP addr 23
+        memoryCmd := MemCmd.bankActivate        
+        io.sdramControllerPins.ramOut.addr(9,0) := address(22,13)
+        io.sdramControllerPins.ramOut.ba := address(25,24)
+        
+        // tell patmos we accept
+        io.ocp.S.CmdAccept := high
+        
         // reset burst counter
-        // io.ocp.S.CmdAccept should be low
+        burstCount := Bits(4)
+        
         // Set next state to write
+        state := write
 
     }
     
@@ -147,7 +154,11 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
   
   .otherwise { 
   
-    // Not used - could be replaced by one of the states
+    // Used for standard register value update
+    address := address;
+    io.ocp.S.CmdAccept := low
+    io.sdramControllerPins.ramOut.ba := low
+    memoryCmd := MemCmd.noOperation
     
   }
   
@@ -225,35 +236,33 @@ object MemCmd {
     return reg
   }
 
-  def encode(memCmd: UInt, clk: Bits, cs:Bits, ras:Bits, cas:Bits, we:Bits, ba:Bits, a10:Bits) = {
+  def encode(memCmd: UInt, clk: Bits, cs:Bits, ras:Bits, cas:Bits, we:Bits, a10:Bits) = {
     when(memCmd === deviceDeselect) {
-      cs := high
-    }.elsewhen(memCmd === noOperation) {
-      cs := low; ras := high; cas := high; we := high
+      clk := high; cs := high; ras := low; cas := low; we := low; a10 := low
     }.elsewhen(memCmd === burstStop) {
-      cs := low; ras := high; cas := high; we := low
+      clk := high; cs := low; ras := high; cas := high; we := low; a10 := low
     }.elsewhen(memCmd === read) {
-      cs := low; ras := high; cas := low; we := high; a10 := low
+      clk := high; cs := low; ras := high; cas := low; we := high; a10 := low
     }.elsewhen(memCmd === writeWithAutoPrecharge) {
-      cs := low; ras := high; cas := low; we := high; a10 := high
+      clk := high; cs := low; ras := high; cas := low; we := high; a10 := high
     }.elsewhen(memCmd === write) {
-      cs := low; ras := high; cas := low; we := low; a10 := low
+      clk := high; cs := low; ras := high; cas := low; we := low; a10 := low
     }.elsewhen(memCmd === writeWithAutoPrecharge) {
-      cs := low; ras := high; cas := low; we := low; a10 := high
+      clk := high; cs := low; ras := high; cas := low; we := low; a10 := high
     }.elsewhen(memCmd === bankActivate) {
-      cs := low; ras := low; cas := high; we := high
+      clk := high; cs := low; ras := low; cas := high; we := high; a10 := low
     }.elsewhen(memCmd === prechargeSelectBank) {
-      cs := low; ras := low; cas := high; we := low; a10 := low
+      clk := high; cs := low; ras := low; cas := high; we := low; a10 := low
     }.elsewhen(memCmd === prechargeAllBanks) {
-      cs := low; ras := low; cas := high; we := low; a10 := high
+      clk := high; cs := low; ras := low; cas := high; we := low; a10 := high
     }.elsewhen(memCmd === cbrAutoRefresh) {
-      clk := high; cs := low; ras := low; cas := low; we := high
+      clk := high; cs := low; ras := low; cas := low; we := high; a10 := low
     }.elsewhen(memCmd === selfRefresh) {
-      clk := low; cs := low; ras := low; cas := low; we := high
+      clk := low; cs := low; ras := low; cas := low; we := high; a10 := low
     }.elsewhen(memCmd === modeRegisterSet) {
-      cs := low; ras := low; cas := low; we := low; ba := low; a10 := low
-    }.otherwise {
-      // Entering here is an error
+      clk := high; cs := low; ras := low; cas := low; we := low; a10 := low
+    }.otherwise { // assumes memCmd === noOperation
+      clk := high; cs := low; ras := high; cas := high; we := high; a10 := low
     }
   }
 }
@@ -262,6 +271,6 @@ object sdramControllerMain {
   def main(args: Array[String]): Unit = {
     val chiselArgs   = args.slice(1, args.length)
     val ocpAddrWidth = args(0).toInt
-    chiselMain(chiselArgs, () => Module(new SdramController(ocpAddrWidth)))
+    chiselMain(chiselArgs, () => Module(new SdramController(ocpAddrWidth,4)))
   }
 }
