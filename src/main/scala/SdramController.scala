@@ -44,39 +44,20 @@ object SdramController extends DeviceObject {
   }
 }
 
-class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocpAddrWidth) {
+class SdramController(ocpAddrWidth: Int) extends BurstDevice(ocpAddrWidth) {
   override val io = new BurstDeviceIO(ocpAddrWidth) with SdramController.Pins
   val cmd         = io.ocp.M.Cmd
   // Controller states
   val idle :: write :: read :: Nil = Enum(UInt(), 3)
   val state = Reg(init = idle);
-  // counter used for burst
-  val burstCount = burstLen
 
   // Examples of use of the encoder/decoder of memCmd. We just need to send orders to the memory, so the decode function may be not used in the future
-  val memCmd      = MemCmd.decode(
-                    clk = io.sdramControllerPins.ramOut.clk,
-                    cs  = io.sdramControllerPins.ramOut.cs,
-                    ras = io.sdramControllerPins.ramOut.ras,
-                    cas = io.sdramControllerPins.ramOut.cas,
-                    we  = io.sdramControllerPins.ramOut.we,
-                    ba  = io.sdramControllerPins.ramOut.ba,
-                    a10 = io.sdramControllerPins.ramOut.addr(10)
-                  )
+  val memCmd      = MemCmd.decode(io)
 
   // We need to provide a default value for the full word in order to be able to do subword assignation. This is to avoid the "Subword assignment requires a default value to have been assigned" chisel error
-  io.sdramControllerPins.ramOut.addr := UInt(0)
+  io.sdramControllerPins.ramOut.addr := UInt(34536)
 
-  MemCmd.encode(
-    memCmd = MemCmd.read,
-    clk    = io.sdramControllerPins.ramOut.clk,
-    cs     = io.sdramControllerPins.ramOut.cs,
-    ras    = io.sdramControllerPins.ramOut.ras,
-    cas    = io.sdramControllerPins.ramOut.cas,
-    we     = io.sdramControllerPins.ramOut.we,
-    ba     = io.sdramControllerPins.ramOut.ba,
-    a10    = io.sdramControllerPins.ramOut.addr(10)
-  ) 
+  MemCmd.encode(MemCmd.read, io) 
   
   // state machine for the ocp signal
   when(state === idle) {
@@ -182,13 +163,43 @@ object MemCmd {
   private val high = Bits(1)
   private val low  = Bits(0)
 
+  
+  // Public API for decoding
+  def decode(io: BurstDeviceIO with SdramController.Pins): UInt = {
+    val cmd = decodeImplementation(
+                clk = io.sdramControllerPins.ramOut.clk,
+                cs  = io.sdramControllerPins.ramOut.cs,
+                ras = io.sdramControllerPins.ramOut.ras,
+                cas = io.sdramControllerPins.ramOut.cas,
+                we  = io.sdramControllerPins.ramOut.we,
+                ba  = io.sdramControllerPins.ramOut.ba,
+                a10 = io.sdramControllerPins.ramOut.addr(10)
+              )
+    return cmd
+  }
+
+  // Public API for encoding
+  def encode(memCmd:UInt, io: BurstDeviceIO with SdramController.Pins) = {
+    encodeImplementation(
+      memCmd = memCmd,
+      clk    = io.sdramControllerPins.ramOut.clk,
+      cs     = io.sdramControllerPins.ramOut.cs,
+      ras    = io.sdramControllerPins.ramOut.ras,
+      cas    = io.sdramControllerPins.ramOut.cas,
+      we     = io.sdramControllerPins.ramOut.we,
+      ba     = io.sdramControllerPins.ramOut.ba,
+      a10    = io.sdramControllerPins.ramOut.addr(10)
+    ) 
+  }
+
   /* 
+    Private implementation of a decoding
     According to the datasheet there are other signals not considered in this function. This is why:
       - clk(n-1): in all cases of the "COMMAND TRUTH TABLE" is high
       - A12, A11, A9 to A0: data is allways going to be high or low, allways valid values
       - Valid states are not considered: they are allways going to be valid (it is not possible to have a signal with a value between low and high)
   */
-  def decode(clk: Bits, cs:Bits, ras:Bits, cas:Bits, we:Bits, ba:Bits, a10:Bits): UInt = {
+  private def decodeImplementation(clk: Bits, cs:Bits, ras:Bits, cas:Bits, we:Bits, ba:Bits, a10:Bits): UInt = {
     val reg  = Reg(UInt())
 
     when(cs === high) {
@@ -225,7 +236,7 @@ object MemCmd {
     return reg
   }
 
-  def encode(memCmd: UInt, clk: Bits, cs:Bits, ras:Bits, cas:Bits, we:Bits, ba:Bits, a10:Bits) = {
+  private def encodeImplementation(memCmd: UInt, clk: Bits, cs:Bits, ras:Bits, cas:Bits, we:Bits, ba:Bits, a10:Bits) = {
     when(memCmd === deviceDeselect) {
       cs := high
     }.elsewhen(memCmd === noOperation) {
