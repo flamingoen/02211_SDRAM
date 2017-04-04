@@ -1,11 +1,47 @@
+/*
+   Copyright 2013 Technical University of Denmark, DTU Compute.
+   All rights reserved.
+
+   This file is part of the time-predictable VLIW processor Patmos.
+
+   Redistribution and use in source and binary forms, with or without
+   modification, are permitted provided that the following conditions are met:
+
+      1. Redistributions of source code must retain the above copyright notice,
+         this list of conditions and the following disclaimer.
+
+      2. Redistributions in binary form must reproduce the above copyright
+         notice, this list of conditions and the following disclaimer in the
+         documentation and/or other materials provided with the distribution.
+
+   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDER ``AS IS'' AND ANY EXPRESS
+   OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+   OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN
+   NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY
+   DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+   (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+   LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+   ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+   THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+   The views and conclusions contained in the software and documentation are
+   those of the authors and should not be interpreted as representing official
+   policies, either expressed or implied, of the copyright holder.
+ */
+
+/*
+ * SDRAM memory controller written in Chisel for the ALTDE2-115 board
+ *
+ * Authors: Andres Cecilia Luque (a.cecilia.luque@gmail.com)
+ *          OtherAuthor (AuthorMail)
+ *
+ */
 
 package io
-
 import scala.math._
-
 import Chisel._
 import Node._
-
 import ocp._
 import patmos.Constants._
 
@@ -47,9 +83,7 @@ object SdramController extends DeviceObject {
 class SdramController(ocpAddrWidth: Int) extends BurstDevice(ocpAddrWidth) {
   override val io = new BurstDeviceIO(ocpAddrWidth) with SdramController.Pins
   val cmd         = io.ocp.M.Cmd
-  // Controller states
-  val idle :: write :: read :: Nil = Enum(UInt(), 3)
-  val state = Reg(init = idle)
+  val state       = Reg(init = ControllerState.idle)
 
   // Examples of use of the encoder/decoder of memCmd. We just need to send orders to the memory, so the decode function may be not used in the future
   // We need to provide a default value for the full word previous encoding in order to be able to do subword assignation. This is to avoid the "Subword assignment requires a default value to have been assigned" chisel error
@@ -58,7 +92,7 @@ class SdramController(ocpAddrWidth: Int) extends BurstDevice(ocpAddrWidth) {
   MemCmd.setToPins(MemCmd.read, io) 
   
   // state machine for the ocp signal
-  when(state === idle) {
+  when(state === ControllerState.idle) {
     
     when (cmd === OcpCmd.RD) {
 
@@ -92,7 +126,7 @@ class SdramController(ocpAddrWidth: Int) extends BurstDevice(ocpAddrWidth) {
     }
   } 
   
-  .elsewhen (state === write) {
+  .elsewhen (state === ControllerState.write) {
   
     // Send write signal to memCmd with address and AUTO PRECHARGE enabled
     // set io.ocp.S.CmdAccept to HIGH
@@ -106,7 +140,7 @@ class SdramController(ocpAddrWidth: Int) extends BurstDevice(ocpAddrWidth) {
   
   } 
   
-  .elsewhen (state === read) {
+  .elsewhen (state === ControllerState.read) {
   
     // Send read signal to memCmd with address and AUTO PRECHARGE enabled
     
@@ -153,7 +187,12 @@ class SdramController(ocpAddrWidth: Int) extends BurstDevice(ocpAddrWidth) {
 
 }
 
-object MemCmd {
+// Memory controller internal states
+private object ControllerState {
+    val idle :: write :: read :: Nil = Enum(UInt(), 3)
+}
+
+private object MemCmd {
   // States obtained from the IS42/45R86400D/16320D/32160D datasheet, from the table "COMMAND TRUTH TABLE"
   val deviceDeselect :: noOperation :: burstStop :: read :: readWithAutoPrecharge :: write :: writeWithAutoPrecharge :: bankActivate :: prechargeSelectBank :: prechargeAllBanks :: cbrAutoRefresh :: selfRefresh :: modeRegisterSet :: Nil = Enum(UInt(), 13)
   
