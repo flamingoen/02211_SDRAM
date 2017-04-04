@@ -49,15 +49,13 @@ class SdramController(ocpAddrWidth: Int) extends BurstDevice(ocpAddrWidth) {
   val cmd         = io.ocp.M.Cmd
   // Controller states
   val idle :: write :: read :: Nil = Enum(UInt(), 3)
-  val state = Reg(init = idle);
+  val state = Reg(init = idle)
 
   // Examples of use of the encoder/decoder of memCmd. We just need to send orders to the memory, so the decode function may be not used in the future
-  val memCmd      = MemCmd.decode(io)
-
-  // We need to provide a default value for the full word in order to be able to do subword assignation. This is to avoid the "Subword assignment requires a default value to have been assigned" chisel error
+  // We need to provide a default value for the full word previous encoding in order to be able to do subword assignation. This is to avoid the "Subword assignment requires a default value to have been assigned" chisel error
+  val memCmd = MemCmd.getFromPins(io)
   io.sdramControllerPins.ramOut.addr := UInt(34536)
-
-  MemCmd.encode(MemCmd.read, io) 
+  MemCmd.setToPins(MemCmd.read, io) 
   
   // state machine for the ocp signal
   when(state === idle) {
@@ -163,10 +161,9 @@ object MemCmd {
   private val high = Bits(1)
   private val low  = Bits(0)
 
-  
   // Public API for decoding
-  def decode(io: BurstDeviceIO with SdramController.Pins): UInt = {
-    val cmd = decodeImplementation(
+  def getFromPins(io: BurstDeviceIO with SdramController.Pins): UInt = {
+    val cmd = getFromPinsImplementation(
                 clk = io.sdramControllerPins.ramOut.clk,
                 cs  = io.sdramControllerPins.ramOut.cs,
                 ras = io.sdramControllerPins.ramOut.ras,
@@ -179,8 +176,8 @@ object MemCmd {
   }
 
   // Public API for encoding
-  def encode(memCmd:UInt, io: BurstDeviceIO with SdramController.Pins) = {
-    encodeImplementation(
+  def setToPins(memCmd:UInt, io: BurstDeviceIO with SdramController.Pins) = {
+    setToPinsImplementation(
       memCmd = memCmd,
       clk    = io.sdramControllerPins.ramOut.clk,
       cs     = io.sdramControllerPins.ramOut.cs,
@@ -199,7 +196,7 @@ object MemCmd {
       - A12, A11, A9 to A0: data is allways going to be high or low, allways valid values
       - Valid states are not considered: they are allways going to be valid (it is not possible to have a signal with a value between low and high)
   */
-  private def decodeImplementation(clk: Bits, cs:Bits, ras:Bits, cas:Bits, we:Bits, ba:Bits, a10:Bits): UInt = {
+  private def getFromPinsImplementation(clk: Bits, cs:Bits, ras:Bits, cas:Bits, we:Bits, ba:Bits, a10:Bits): UInt = {
     val reg  = Reg(UInt())
 
     when(cs === high) {
@@ -236,7 +233,7 @@ object MemCmd {
     return reg
   }
 
-  private def encodeImplementation(memCmd: UInt, clk: Bits, cs:Bits, ras:Bits, cas:Bits, we:Bits, ba:Bits, a10:Bits) = {
+  private def setToPinsImplementation(memCmd: UInt, clk: Bits, cs:Bits, ras:Bits, cas:Bits, we:Bits, ba:Bits, a10:Bits) = {
     when(memCmd === deviceDeselect) {
       cs := high
     }.elsewhen(memCmd === noOperation) {
