@@ -92,11 +92,8 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
         
         // Send ACT signal to mem where addr = OCP addr 22-13, ba1 = OCP addr 24, ba2 = OCP addr 23
         memoryCmd := MemCmd.bankActivate        
-        io.sdramControllerPins.ramOut.addr(9,0) := address(22,13)
+        io.sdramControllerPins.ramOut.addr(12,0) := address(12,0)
         io.sdramControllerPins.ramOut.ba := address(25,24)
-        
-        // tell patmos we accept
-        io.ocp.S.CmdAccept := high
         
         // reset burst counter
         burstCount := Bits(4)
@@ -123,15 +120,26 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
   .elsewhen (state === write) {
   
     // Send write signal to memCmd with address and AUTO PRECHARGE enabled
-    // set io.ocp.S.CmdAccept to HIGH
+    memoryCmd := MemCmd.write
+    io.sdramControllerPins.ramOut.addr(9,0) := address(22,13)
+    io.sdramControllerPins.ramOut.addr(10)  := high
+    // set io.ocp.S.CmdAccept to HIGH only on first iteration
+    io.ocp.S.CmdAccept := high & burstCount(2)
     // set io.ocp.S.SDataAccept to HIGH
+    io.ocp.S.DataAccept := high    
+    // set data and byte enable for read
+    io.sdramControllerPins.ramOut.dq := io.ocp.M.Data
+    io.sdramControllerPins.ramOut.dqm := io.ocp.M.DataByteEn
     
-    // if burstCounter > 0
-        // burstcounter--
-        // set next address = addr + 4
-        // set next state to write
-    // else set next state to idle
-  
+    // Either continue or stop burst
+    when(burstCount > Bits(1)) {
+        burstCount := burstCount - Bits(1)
+        address := address + Bits(4)
+        state := write
+    } .otherwise {
+        state := idle
+    }
+    
   } 
   
   .elsewhen (state === read) {
@@ -157,6 +165,9 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
     // Used for standard register value update
     address := address;
     io.ocp.S.CmdAccept := low
+    io.ocp.S.DataAccept := low
+    io.sdramControllerPins.ramOut.dq := low
+    io.sdramControllerPins.ramOut.dqm := low
     io.sdramControllerPins.ramOut.ba := low
     memoryCmd := MemCmd.noOperation
     
