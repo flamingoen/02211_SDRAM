@@ -6,4 +6,4 @@ patmos:
 sdram:
 	cp src/main/scala/SdramController.scala ~/t-crest/patmos/hardware/src/io/SdramController.scala
 	cp copyToPatmosProject/Makefile ~/t-crest/patmos/hardware/Makefile
-	export MEMCTRL_ADDR_WIDTH=32 && cd ~/t-crest/patmos/hardware && make /home/patmos/t-crest/patmos/hardware/build/SdramController.v
+	export MEMCTRL_ADDR_WIDTH=32 && cd ~/t-crest/patmos/hardware && make ~/t-crest/patmos/hardware/build/SdramController.v
