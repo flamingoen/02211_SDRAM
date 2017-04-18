@@ -57,7 +57,9 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
   val memoryCmd = Reg(init = MemCmd.noOperation);
   val address = Reg(init = Bits(0))
   val initCycles = (0.0001*CLOCK_FREQ).toInt // Calculate number of cycles for init from processor clock freq
+  val refreshRate = (0.064/CLOCK_FREQ).toInt
   val initCounter = Reg(init = Bits(initCycles))
+  val refreshCounter = Reg(init = Bits(refreshRate))
   
   // counter used for burst
   val counter = Reg(init = Bits(0));
@@ -75,12 +77,21 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
     a10    = io.sdramControllerPins.ramOut.addr(10)
   ) 
   
-  // state machine for the ocp signal
+  refreshCounter := refreshCounter - Bits(1)
   
+  // state machine for the ocp signal
   when(state === idle) {
     
-    when (cmd === OcpCmd.RD) {
-
+    when (refreshCounter < Bits(3+burstLen)) { // 3+burstLen in order to make sure there is room for read/write
+        memoryCmd := MemCmd.cbrAutoRefresh
+        io.sdramControllerPins.ramOut.cs := low
+        io.sdramControllerPins.ramOut.ras := low
+        io.sdramControllerPins.ramOut.cas := low
+        io.sdramControllerPins.ramOut.we := high
+        refreshCounter := Bits(refreshRate)
+        state := idle
+        
+    } .elsewhen (cmd === OcpCmd.RD) {
 
         // Save address to later use
         address := io.ocp.M.Addr
