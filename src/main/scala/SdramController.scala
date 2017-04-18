@@ -38,7 +38,7 @@ object SdramController extends DeviceObject {
         val cs   = Bits(OUTPUT, width = 1)
       }
       val ramIn = new Bundle {
-      val dq    = Bits(INPUT, width = sdramAddrWidth)
+        val dq    = Bits(INPUT, width = sdramAddrWidth)
       }
     }
   }
@@ -56,6 +56,8 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
   val state = Reg(init = init_start);
   val memoryCmd = Reg(init = MemCmd.noOperation);
   val address = Reg(init = Bits(0))
+  val initCycles = (0.0001*CLOCK_FREQ).toInt // Calculate number of cycles for init from processor clock freq
+  val initCounter = Reg(init = Bits(initCycles))
   
   // counter used for burst
   val counter = Reg(init = Bits(0));
@@ -75,8 +77,6 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
   
   // state machine for the ocp signal
   
-  // TODO: we should add a init state doing load mode register to set burst length
-  
   when(state === idle) {
     
     when (cmd === OcpCmd.RD) {
@@ -90,8 +90,11 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
         io.sdramControllerPins.ramOut.addr(12,0) := address(22,13)
         io.sdramControllerPins.ramOut.ba := address(25,24)
         
+        // send accept to ocp
+        io.ocp.S.CmdAccept := high
+        
         // reset burst counter
-        counter := Bits(4)
+        counter := Bits(burstLen+2)
         
         // Set next state to write
         state := read
@@ -108,8 +111,11 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
         io.sdramControllerPins.ramOut.addr(12,0) := address(22,13)
         io.sdramControllerPins.ramOut.ba := address(25,24)
         
+        // send accept to ocp
+        io.ocp.S.CmdAccept := high
+        
         // reset burst counter
-        counter := Bits(4)
+        counter := Bits(burstLen)
         
         // Set next state to write
         state := write
@@ -137,9 +143,7 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
     io.sdramControllerPins.ramOut.addr(9,0) := address(13,0)
     io.sdramControllerPins.ramOut.addr(10)  := high
     // set io.ocp.S.CmdAccept to HIGH only on first iteration
-    io.ocp.S.CmdAccept := high & counter(2)
-    // set io.ocp.S.SDataAccept to HIGH
-    io.ocp.S.DataAccept := high    
+    io.ocp.S.CmdAccept := high & counter(2)  
     // set data and byte enable for read
     io.sdramControllerPins.ramOut.dq := io.ocp.M.Data
     io.sdramControllerPins.ramOut.dqm := io.ocp.M.DataByteEn
@@ -150,6 +154,7 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
         address := address + Bits(4)
         state := write
     } .otherwise {
+        io.ocp.S.Resp := OcpResp.DVA
         state := idle
     }
     
@@ -157,28 +162,27 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
   
   .elsewhen (state === read) {
   
-    // Send read signal to memCmd with address and AUTO PRECHARGE enabled
-    memoryCmd := MemCmd.read
-    io.sdramControllerPins.ramOut.addr(9,0) := address(13,0)
-    io.sdramControllerPins.ramOut.addr(10)  := high
+    // Send read signal to memCmd with address and AUTO PRECHARGE enabled - Only on first iteration
+    when (counter === Bits(2+burstLen)) {
+        memoryCmd := MemCmd.read
+        io.sdramControllerPins.ramOut.addr(9,0) := address(13,0)
+        io.sdramControllerPins.ramOut.addr(10)  := high
+    }
+    
+    when (counter < Bits(burstLen)) {
+        io.ocp.S.Data := io.sdramControllerPins.ramIn.dq
+        io.ocp.S.Resp := OcpResp.DVA
+    }
     
     // go to next address for duration of burst
     when (counter > Bits(1)) {
         counter := counter - Bits(1)
-        address := address + Bits(4)
         state := read
     } .otherwise { 
         state := idle
     }
-    
-    // after 2 cycles
-        // set io.ocp.S.CmdAccept to HIGH
-        
-    // after 6 cycles
-        // set next state to idle
-    // before that set next state to read
   
-  } 
+  }
   
   // The following is all part of the initialization phase
   .elsewhen (state === init_start) {
@@ -193,7 +197,12 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
     *  INHIBIT or NOP may be applied during the 100us period and
     *  should continue at least through the end of the period. */
     memoryCmd := MemCmd.noOperation
-    state := init_precharge
+    when (initCounter>Bits(0)) {   
+        initCounter := initCounter - Bits(1);
+        state := init_start 
+    } .otherwise {
+        state := init_precharge 
+        }
     
   } .elsewhen (state === init_precharge) {
     /* With at least one COMMAND INHIBIT or NOP command
@@ -260,30 +269,11 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
     io.sdramControllerPins.ramOut.dqm := low
     io.sdramControllerPins.ramOut.ba := low
     io.sdramControllerPins.ramOut.cke := low
+    io.ocp.S.Resp := OcpResp.NULL
+    io.ocp.S.Data := low
+    io.ocp.S.DataAccept := low
     memoryCmd := MemCmd.noOperation
   }
-  
-  
-// Not sure what to do with this
-//
-//   when(memCmd === MemCmd.read) {
-// 
-//   }.elsewhen(memCmd === MemCmd.write) {
-// 
-//   }.elsewhen(memCmd === MemCmd.cbrAutoRefresh) {
-// 
-//   }.elsewhen(memCmd === MemCmd.burstStop) {
-// 
-//   }.elsewhen(memCmd === MemCmd.bankActivate) {
-// 
-//   }.elsewhen(memCmd === MemCmd.noOperation) {
-// 
-//   }.otherwise {
-// 
-//     // Manage possible future cases
-// 
-//   }
-
 }
 
 object MemCmd {
