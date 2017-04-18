@@ -3,7 +3,7 @@
 
   <frequency Hz="80000000"/>
 
-  <ExtMem size="2M" DevTypeRef="Sdram" />
+  <ExtMem size="128M" DevTypeRef="Sdram" />
 
   <IOs>
 	<IO DevTypeRef="Uart" offset="8"/>

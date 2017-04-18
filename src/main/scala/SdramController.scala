@@ -1,11 +1,47 @@
+/*
+   Copyright 2013 Technical University of Denmark, DTU Compute.
+   All rights reserved.
+
+   This file is part of the time-predictable VLIW processor Patmos.
+
+   Redistribution and use in source and binary forms, with or without
+   modification, are permitted provided that the following conditions are met:
+
+      1. Redistributions of source code must retain the above copyright notice,
+         this list of conditions and the following disclaimer.
+
+      2. Redistributions in binary form must reproduce the above copyright
+         notice, this list of conditions and the following disclaimer in the
+         documentation and/or other materials provided with the distribution.
+
+   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDER ``AS IS'' AND ANY EXPRESS
+   OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+   OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN
+   NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY
+   DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+   (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+   LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+   ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+   THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+   The views and conclusions contained in the software and documentation are
+   those of the authors and should not be interpreted as representing official
+   policies, either expressed or implied, of the copyright holder.
+ */
+
+/*
+ * SDRAM memory controller written in Chisel for the ALTDE2-115 board
+ *
+ * Authors: Andres Cecilia Luque (a.cecilia.luque@gmail.com)
+ *          OtherAuthor (AuthorMail)
+ *
+ */
 
 package io
-
 import scala.math._
-
 import Chisel._
 import Node._
-
 import ocp._
 import patmos.Constants._
 
@@ -68,15 +104,13 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
   // We need to provide a default value for the full word in order to be able to do subword assignation. This is to avoid the "Subword assignment requires a default value to have been assigned" chisel error
   io.sdramControllerPins.ramOut.addr := UInt(0)
 
-  MemCmd.encode(
-    memCmd = memoryCmd,
-    clk    = io.sdramControllerPins.ramOut.clk,
-    cs     = io.sdramControllerPins.ramOut.cs,
-    ras    = io.sdramControllerPins.ramOut.ras,
-    cas    = io.sdramControllerPins.ramOut.cas,
-    we     = io.sdramControllerPins.ramOut.we,
-    a10    = io.sdramControllerPins.ramOut.addr(10)
-  ) 
+  MemCmd.setToPins(memoryCmd,io)
+
+  // Examples of use of the encoder/decoder of memCmd. We just need to send orders to the memory, so the decode function may be not used in the future
+  // We need to provide a default value for the full word previous encoding in order to be able to do subword assignation. This is to avoid the "Subword assignment requires a default value to have been assigned" chisel error
+  //val memCmd = MemCmd.getFromPins(io)
+  //io.sdramControllerPins.ramOut.addr := UInt(34536)
+  //MemCmd.setToPins(MemCmd.read, io) 
   
   refreshCounter := refreshCounter - Bits(1)
   
@@ -302,7 +336,12 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
   }
 }
 
-object MemCmd {
+// Memory controller internal states
+private object ControllerState {
+    val idle :: write :: read :: Nil = Enum(UInt(), 3)
+}
+
+private object MemCmd {
   // States obtained from the IS42/45R86400D/16320D/32160D datasheet, from the table "COMMAND TRUTH TABLE"
   val deviceDeselect :: noOperation :: burstStop :: read :: readWithAutoPrecharge :: write :: writeWithAutoPrecharge :: bankActivate :: prechargeSelectBank :: prechargeAllBanks :: cbrAutoRefresh :: selfRefresh :: modeRegisterSet :: Nil = Enum(UInt(), 13)
   
@@ -310,13 +349,42 @@ object MemCmd {
   private val high = Bits(1)
   private val low  = Bits(0)
 
+  // Public API for decoding
+  def getFromPins(io: BurstDeviceIO with SdramController.Pins): UInt = {
+    val cmd = getFromPinsImplementation(
+                clk = io.sdramControllerPins.ramOut.clk,
+                cs  = io.sdramControllerPins.ramOut.cs,
+                ras = io.sdramControllerPins.ramOut.ras,
+                cas = io.sdramControllerPins.ramOut.cas,
+                we  = io.sdramControllerPins.ramOut.we,
+                ba  = io.sdramControllerPins.ramOut.ba,
+                a10 = io.sdramControllerPins.ramOut.addr(10)
+              )
+    return cmd
+  }
+
+  // Public API for encoding
+  def setToPins(memCmd:UInt, io: BurstDeviceIO with SdramController.Pins) = {
+    setToPinsImplementation(
+      memCmd = memCmd,
+      clk    = io.sdramControllerPins.ramOut.clk,
+      cs     = io.sdramControllerPins.ramOut.cs,
+      ras    = io.sdramControllerPins.ramOut.ras,
+      cas    = io.sdramControllerPins.ramOut.cas,
+      we     = io.sdramControllerPins.ramOut.we,
+      ba     = io.sdramControllerPins.ramOut.ba,
+      a10    = io.sdramControllerPins.ramOut.addr(10)
+    ) 
+  }
+
   /* 
+    Private implementation of a decoding
     According to the datasheet there are other signals not considered in this function. This is why:
       - clk(n-1): in all cases of the "COMMAND TRUTH TABLE" is high
       - A12, A11, A9 to A0: data is allways going to be high or low, allways valid values
       - Valid states are not considered: they are allways going to be valid (it is not possible to have a signal with a value between low and high)
   */
-  def decode(clk: Bits, cs:Bits, ras:Bits, cas:Bits, we:Bits, ba:Bits, a10:Bits): UInt = {
+  private def getFromPinsImplementation(clk: Bits, cs:Bits, ras:Bits, cas:Bits, we:Bits, ba:Bits, a10:Bits): UInt = {
     val reg  = Reg(UInt())
 
     when(cs === high) {
@@ -353,7 +421,7 @@ object MemCmd {
     return reg
   }
 
-  def encode(memCmd: UInt, clk: Bits, cs:Bits, ras:Bits, cas:Bits, we:Bits, a10:Bits) = {
+  private def setToPinsImplementation(memCmd: UInt, clk: Bits, cs:Bits, ras:Bits, cas:Bits, we:Bits, ba:Bits, a10:Bits) = {
     when(memCmd === deviceDeselect) {
       clk := high; cs := high; ras := low; cas := low; we := low; a10 := low
     }.elsewhen(memCmd === burstStop) {
