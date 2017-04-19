@@ -32,9 +32,9 @@
 
 /*
  * SDRAM memory controller written in Chisel for the ALTDE2-115 board
- *
+ *  
  * Authors: Andres Cecilia Luque (a.cecilia.luque@gmail.com)
- *          OtherAuthor (AuthorMail)
+ *          Roman Birca (roman.birca@gmail.com)
  *
  */
 
@@ -46,17 +46,20 @@ import ocp._
 import patmos.Constants._
 
 object SdramController extends DeviceObject {
-  private val sdramAddrWidth = 13
+  var sdramAddrWidth = 13
   var sdramDataWidth = 32
   var ocpAddrWidth   = 25
+  var ocpBurstLen    = 0
 
   def init(params: Map[String, String]) = {
-    sdramDataWidth = getPosIntParam(params, "sdramDataWidth")
-    ocpAddrWidth   = getPosIntParam(params, "ocpAddrWidth")
+    sdramAddrWidth  = getPosIntParam(params, "sdramAddrWidth")
+    sdramDataWidth  = getPosIntParam(params, "sdramDataWidth")
+    ocpAddrWidth    = getPosIntParam(params, "ocpAddrWidth")
+    ocpBurstLen     = getPosIntParam(params, "ocpBurstLen")
   }
 
   def create(params: Map[String, String]): SdramController = {
-    Module(new SdramController(ocpAddrWidth,4))
+    Module(new SdramController(sdramAddrWidth, sdramDataWidth, ocpAddrWidth, ocpBurstLen))
   }
 
   trait Pins {
@@ -72,6 +75,7 @@ object SdramController extends DeviceObject {
         val cas  = Bits(OUTPUT, width = 1)
         val we   = Bits(OUTPUT, width = 1)
         val cs   = Bits(OUTPUT, width = 1)
+        val dqEn = Bits(OUTPUT, width = 1)
       }
       val ramIn = new Bundle {
         val dq    = Bits(INPUT, width = sdramAddrWidth)
@@ -80,7 +84,9 @@ object SdramController extends DeviceObject {
   }
 }
 
-class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocpAddrWidth) {
+class SdramController(sdramAddrWidth: Int, sdramDataWidth: Int, 
+  ocpAddrWidth: Int, ocpBurstLen : Int) extends BurstDevice(ocpAddrWidth) {
+
   override val io = new BurstDeviceIO(ocpAddrWidth) with SdramController.Pins
   val cmd         = io.ocp.M.Cmd
   
@@ -93,13 +99,34 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
   val memoryCmd = Reg(init = MemCmd.noOperation);
   val address = Reg(init = Bits(0))
   val initCycles = (0.0001*CLOCK_FREQ).toInt // Calculate number of cycles for init from processor clock freq
-  val refreshRate = (0.064/CLOCK_FREQ).toInt
+  val refreshRate = (0.064*CLOCK_FREQ).toInt
   val thisManyTimes = 8192
   val initCounter = Reg(init = Bits(initCycles))
   val refreshCounter = Reg(init = Bits(refreshRate))
   
   // counter used for burst
   val counter = Reg(init = Bits(0));
+
+  // default assignments
+  val slavePort = io.ocp.S
+  val ramOut = io.sdramControllerPins.ramOut
+  // Default assignemts to OCP slave signals
+  slavePort.Resp       := OcpResp.NULL
+  slavePort.CmdAccept  := Bits(1) 
+  slavePort.DataAccept := Bits(1)
+  slavePort.Data       := Bits(sdramDataWidth)
+  // Default assignemts to SdramController OUTPUT signals
+  ramOut.dqEn := Bits(1)
+  ramOut.dq   := Bits(sdramDataWidth)         
+  ramOut.dqm  := Bits(4)         
+  ramOut.addr := Bits(sdramDataWidth)         
+  ramOut.ba   := Bits(2)         
+  ramOut.clk  := Bits(1)         
+  ramOut.cke  := Bits(1)         
+  ramOut.ras  := Bits(1)         
+  ramOut.cas  := Bits(1)         
+  ramOut.we   := Bits(1)         
+  ramOut.cs   := Bits(1)
 
   // We need to provide a default value for the full word in order to be able to do subword assignation. This is to avoid the "Subword assignment requires a default value to have been assigned" chisel error
   io.sdramControllerPins.ramOut.addr := UInt(0)
@@ -117,7 +144,7 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
   // state machine for the ocp signal
   when(state === idle) {
     
-    when (refreshCounter < Bits(3+burstLen)) { // 3+burstLen in order to make sure there is room for read/write
+    when (refreshCounter < Bits(3+ocpBurstLen)) { // 3+ocpBurstLen in order to make sure there is room for read/write
         memoryCmd := MemCmd.cbrAutoRefresh
         io.sdramControllerPins.ramOut.cs := low
         io.sdramControllerPins.ramOut.ras := low
@@ -134,13 +161,13 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
         // Send ACT signal to mem where addr = OCP addr 22-13, ba1 = OCP addr 24, ba2 = OCP addr 23
         memoryCmd := MemCmd.bankActivate        
         io.sdramControllerPins.ramOut.addr(12,0) := address(22,13)
-        io.sdramControllerPins.ramOut.ba := address(25,24)
+        io.sdramControllerPins.ramOut.ba := address(24,23)
         
         // send accept to ocp
         io.ocp.S.CmdAccept := high
         
         // reset burst counter
-        counter := Bits(burstLen+2)
+        counter := Bits(ocpBurstLen+2)
         
         // Set next state to write
         state := read
@@ -155,13 +182,13 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
         // Send ACT signal to mem where addr = OCP addr 22-13, ba1 = OCP addr 24, ba2 = OCP addr 23
         memoryCmd := MemCmd.bankActivate        
         io.sdramControllerPins.ramOut.addr(12,0) := address(22,13)
-        io.sdramControllerPins.ramOut.ba := address(25,24)
+        io.sdramControllerPins.ramOut.ba := address(24,23)
         
         // send accept to ocp
         io.ocp.S.CmdAccept := high
         
         // reset burst counter
-        counter := Bits(burstLen)
+        counter := Bits(ocpBurstLen)
         
         // Set next state to write
         state := write
@@ -209,13 +236,13 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
   .elsewhen (state === read) {
   
     // Send read signal to memCmd with address and AUTO PRECHARGE enabled - Only on first iteration
-    when (counter === Bits(2+burstLen)) {
+    when (counter === Bits(2+ocpBurstLen)) {
         memoryCmd := MemCmd.read
         io.sdramControllerPins.ramOut.addr(9,0) := address(13,0)
         io.sdramControllerPins.ramOut.addr(10)  := high
     }
     
-    when (counter < Bits(burstLen)) {
+    when (counter < Bits(ocpBurstLen)) {
         io.ocp.S.Data := io.sdramControllerPins.ramIn.dq
         io.ocp.S.Resp := OcpResp.DVA
     }
@@ -312,11 +339,12 @@ class SdramController(ocpAddrWidth: Int, burstLen : Int) extends BurstDevice(ocp
         io.sdramControllerPins.ramOut.ras := low
         io.sdramControllerPins.ramOut.cas := low
         io.sdramControllerPins.ramOut.we := high
-        refreshCounter := Bits(refreshRate)
-        when( refreshCounter > Bits(refreshRate-thisManyTimes) ) { // do it this many times
-            state := refresh
+        
+        when( refreshCounter > UInt(0) ) { // do it this many times
+          refreshCounter := refreshCounter - UInt(1)
+          state := refresh
         } .otherwise { 
-            state := idle
+          state := idle
         }
   }
   
@@ -452,10 +480,15 @@ private object MemCmd {
   }
 }
 
-object sdramControllerMain {
-  def main(args: Array[String]): Unit = {
-    val chiselArgs   = args.slice(1, args.length)
-    val ocpAddrWidth = args(0).toInt
-    chiselMain(chiselArgs, () => Module(new SdramController(ocpAddrWidth,4)))
-  }
-}
+// object sdramControllerMain {
+//   def main(args: Array[String]): Unit = {
+//     val chiselArgs   = args.slice(1, args.length)
+//     val sdramAddrWidth  = args(0).toInt
+//     val sdramDataWidth  = args(1).toInt
+//     val ocpAddrWidth    = args(2).toInt
+//     val ocpBurstLen     = args(3).toInt
+
+//     chiselMain(chiselArgs, () => Module(new SdramController(sdramAddrWidth, sdramDataWidth,
+//       ocpAddrWidth, ocpBurstLen)))
+//   }
+// }
