@@ -1,3 +1,6 @@
 project/
 target/
+quartus/altde2-115_ramctrl/db/
+quartus/altde2-115_ramctrl/incremental_db/
+quartus/altde2-115_ramctrl/output_files/
 *.v
