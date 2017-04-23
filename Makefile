@@ -1,4 +1,5 @@
 SRC=src/main/scala
+SRC_TEST=src/test/scala
 
 BOARD?=altde2-115_ramctrl
 BOOTAPP?=bootable-bootloader
@@ -6,10 +7,12 @@ BOOTAPP?=bootable-bootloader
 PAT_DIR=~/t-crest/patmos
 PAT_HW_DIR=$(PAT_DIR)/hardware
 PAT_DEV_DIR=$(PAT_HW_DIR)/src/io
+PAT_TEST_DIR=$(PAT_DEV_DIR)/test
 
 copydesign:
 	cp config/altde2-115_ramctrl.xml $(PAT_HW_DIR)/config/altde2-115_ramctrl.xml
 	cp $(SRC)/SdramController.scala $(PAT_DEV_DIR)/SdramController.scala
+	cp $(SRC_TEST)/SdramControllerTester.scala $(PAT_TEST_DIR)/SdramControllerTester.scala
 
 copyquartus:
 	cp vhdl/patmos_de2-115_ramctrl.vhdl $(PAT_HW_DIR)/vhdl
@@ -24,7 +27,5 @@ gen: copydesign
 synth: copydesign copyquartus
 	$(MAKE) -C $(PAT_DIR)/hardware synth_quartus BOOTAPP=$(BOOTAPP) BOARD=$(BOARD)
 
-sdram:
-	cp $(SRC)/SdramController.scala $(PAT_DEV_DIR)/SdramController.scala
-	cp copyToPatmosProject/Makefile $(PAT_HW_DIR)/Makefile
-	export MEMCTRL_ADDR_WIDTH=32 && cd ~/t-crest/patmos/hardware && make ~/t-crest/patmos/hardware/build/SdramController.v
+sdram: copydesign
+	export MEMCTRL_ADDR_WIDTH=32 && cd $(PAT_HW_DIR) && make $(PAT_HW_DIR)/build/SdramController.v

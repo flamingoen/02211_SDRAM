@@ -96,11 +96,10 @@ class SdramController(sdramAddrWidth: Int, sdramDataWidth: Int,
   // Controller states
   val idle :: write :: read :: init_start :: refresh :: init_precharge :: init_refresh :: init_register :: Nil = Enum(UInt(), 8)
   val state = Reg(init = init_start);
-  val memoryCmd = Reg(init = MemCmd.noOperation);
+  val memoryCmd = UInt();
   val address = Reg(init = Bits(0))
   val initCycles = (0.0001*CLOCK_FREQ).toInt // Calculate number of cycles for init from processor clock freq
   val refreshRate = (0.064*CLOCK_FREQ).toInt
-  val thisManyTimes = 8192
   val initCounter = Reg(init = Bits(initCycles))
   val refreshCounter = Reg(init = Bits(refreshRate))
   
@@ -291,7 +290,6 @@ class SdramController(sdramAddrWidth: Int, sdramDataWidth: Int,
     *  must be performed. */
     memoryCmd := MemCmd.cbrAutoRefresh
     when (counter===high) {
-        counter := counter - Bits(1)
         state := init_refresh
     } .otherwise {
         state := init_register
@@ -480,15 +478,15 @@ private object MemCmd {
   }
 }
 
-// object sdramControllerMain {
-//   def main(args: Array[String]): Unit = {
-//     val chiselArgs   = args.slice(1, args.length)
-//     val sdramAddrWidth  = args(0).toInt
-//     val sdramDataWidth  = args(1).toInt
-//     val ocpAddrWidth    = args(2).toInt
-//     val ocpBurstLen     = args(3).toInt
+object sdramControllerMain {
+    def main(args: Array[String]): Unit = {
+        val chiselArgs   = args.slice(1, args.length)
+        val sdramAddrWidth  = args(0).toInt
+        val sdramDataWidth  = args(1).toInt
+        val ocpAddrWidth    = args(2).toInt
+        val ocpBurstLen     = args(3).toInt
 
-//     chiselMain(chiselArgs, () => Module(new SdramController(sdramAddrWidth, sdramDataWidth,
-//       ocpAddrWidth, ocpBurstLen)))
-//   }
-// }
+        chiselMain(chiselArgs, () => Module(new SdramController(sdramAddrWidth, sdramDataWidth,
+        ocpAddrWidth, ocpBurstLen)))
+    }
+}
